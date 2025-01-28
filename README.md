@@ -2,7 +2,7 @@
 
 This project investigates how environmental variables and functional traits shape macroinvertebrate distributions using R. It includes Canonical Correspondence Analysis (CCA), Generalized Linear Latent Variable Models (GLLVM), and Fourth Corner Analysis.
 
-![SpeciesCorrelation]("Documentation/image.png")  
+![SpeciesCorrelation](https://github.com/ankita-karki/Multivariateanalysis/blob/main/Documentation/image.png?raw=true)
 
 ---
 
