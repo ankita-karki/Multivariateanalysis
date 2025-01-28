@@ -1,0 +1,226 @@
+###############################
+###Multivariate analysis#######
+#Investigates the roles the different environmental variables play in shaping the distribution of the communities and individual taxa Further, analyzes why species differ to environmental response using functional traits of each species.
+#gllvm package is used to analyze multivariate species data
+###############################
+
+# Packages used
+install.packages("mvabund")
+install.packages("gllvm")
+install.packages("dplyr")
+install.packages("tidyr")
+install.packages("lmom")
+
+#Loading the library 
+library(lmom)
+library(vegan)
+library(mvabund)
+library(plyr)
+library(dplyr)
+library(tidyr)
+pacman::p_load(data.table, dplyr, gllvm, ggplot2, lattice, magrittr, mvabund, stringr, readxl)
+pacman::p_load(ape, Hmsc, data.table, magrittr, dplyr, gllvm, stringr)
+
+
+##Loading the dataset
+env <- readRDS("environment.rds")
+macro <- readRDS("macroinvertebrates.rds")
+traits <- readRDS("traits.rds")
+
+
+## Selecting and filtering the dataset
+##using semi_join to print only the rows of ID that have a matching site for species data
+macro <- semi_join(macro, env, by = "sample_id")
+macro <- macro[order(macro$sample_id),]# sorting species data
+macro <- macro[, 2:51]
+macro_inv <- data.frame(rbind(macro))
+
+#sorting environment data 
+env <- env[order(env$sample_id),]
+env <- env[,2:7] #remove site ID
+env_list <- data.frame(rbind(env)) # converting data.table to data.frame
+
+
+## ----constructing final dataset------------------------------------------------
+#creating new dataframe by combining  3 dataset into one 
+df_list <- list(macro_inv, env_list, traits)
+names(df_list) <- c("macroinv", "env", "traits")
+
+# filtering the species dataset
+inv <- colnames(macro)
+inv %<>% str_replace_all("\\.", "\\ ") %>%
+  str_replace_all("sp\\ .*", "") %>%
+  str_trim()
+names(df_list$macroinv) = inv
+
+
+#############################
+### Multi dimensional scaling
+#############################
+
+## Compute CCA 
+#canonical correspondence analysis
+spe.ca <- cca(macro ~ max_depth + temperature + conductivity + pH + cat_area + altitude, data= env)
+spe.ca
+
+## Anova 
+# to check whether CCA ordination is significant
+anova(spe.ca)
+anova(spe.ca, by="axis") # axes are significant 
+
+# plotting 
+screeplot(spe.ca) 
+
+# Plotting eigenvalues and % of variance for each axis
+(ev2 <- spe.ca$CA$eig)
+
+## CA biplots
+par(mfrow=c(1,2))
+plot(spe.ca, scaling=1, display=c('sp', 'lc', 'cn'), main='Triplot CCA matrix ~ env -scaling 1')
+plot(spe.ca, display=c('sp', 'lc', 'cn'), main="Triplot CCA matrix ~ env -scaling 2") #conductivity, temperature and altitude most influential 
+
+# A posteriori projection of environmental variables in a CA
+(spe.ca.env <- envfit(spe.ca, env))
+
+########################
+#Model based ordination
+########################
+
+library(mvabund)
+library(gllvm)
+
+y <- as.matrix(df_list$macroinv)
+x <- scale(as.matrix(df_list$env))
+TR <-df_list$traits
+
+#estimating the distribution using variational approximation method and link function probit
+fit_bin <- gllvm(y, family="binomial", method = "VA",link = "probit")
+
+##plotting residuals for the Binomial model 
+par(mfrow = c(1,2))
+plot(fit_bin, which = 1) 
+plot(fit_bin, which = 2)
+plot(fit_bin, which = 3) #information criteria suggests binomial as good fit
+
+
+## using ordiplot function to plot a scatter plot of predicted latent variables
+ordiplot.gllvm(fit_bin, biplot = TRUE,ind.spp= 25, xlim = c(-3, 3), ylim = c(-3, 3), arrow.scale = 0.8,
+         main = "Biplot")
+
+ordiplot.gllvm(fit_bin, biplot = FALSE, ind.spp = 25, xlim = c(-3, 3), ylim = c(-3, 3), 
+         main = "Ordination plot", predict.region = TRUE)
+
+rownames(fit_bin$params$theta) <- paste("spp", 1:ncol(fit_bin$y), sep = "") #replacing long species name with shorter one.
+ordiplot.gllvm(fit_bin, biplot = TRUE, ind.spp = 25, xlim = c(-3, 3), ylim = c(-2, 1.6), 
+         main = "Biplot", jitter = TRUE, cex.spp = 0.8)
+
+
+###Modelling with Environmental variable 
+criterias <- NULL
+for(i in 0:5){
+  fiti <- gllvm(y, x, family = "binomial", num.lv = i, sd.errors = FALSE,
+                formula = ~ temperature + conductivity+ altitude, seed = 1234)
+  criterias[i + 1] <- summary(fiti)$AICc
+  names(criterias)[i + 1] = i
+}
+
+criterias 
+
+###gllvm with environmental variables
+fit_bin_env <- gllvm(y, x,  
+                     formula = ~ temperature + conductivity+ altitude, 
+                     family="binomial")
+
+AIC(fit_bin_env)
+
+#coefplot plots
+coefplot(fit_bin_env, cex.ylab = 0.7, mar = c(4, 9, 2, 1), 
+         xlim.list = NULL, mfrow=c(1,1))
+
+
+
+#ordiplot
+rownames(fit_bin_env$params$theta) <- paste("spp", 1:ncol(fit_bin_env$y), sep = "")
+
+ordiplot.gllvm(fit_bin_env, biplot = TRUE,ind.spp= 25, xlim = c(-3, 3), ylim = c(-3, 3), 
+               spp.colors= "red", s.colors="black", cex.env= 0.007, cex.spp= 1,
+             main = "Biplot")
+
+
+# Residual correlation matrix (using getResidulaCOr() to estimate correlation matrix of linear predictor across species)
+cr <- getResidualCor(fit_bin_env)
+library(corrplot); library(gclus)
+corrplot(cr[order.single(cr), order.single(cr)], diag = FALSE, type = "lower", 
+         method = "square", tl.cex = 0.6, tl.srt = 45, tl.col = "red")
+#Regions coloured in blue in correlation plot indicate clusters of species that are positively correlated with each other and red indicates negatively correlated with each other
+
+
+# Using GLLVM without environmental variables and 2 latent variables
+#refering to fit_bin
+# Correlation matrix
+cr0 <- getResidualCor(fit_bin)
+corrplot(cr0[order.single(cr0), order.single(cr0)], diag = FALSE, type = "lower", 
+         method = "square", tl.cex = 0.6, tl.srt = 45, tl.col = "red")
+
+#Quantifying the amount of variation in the data that can be explained by environmental variable
+res_env <- getResidualCov(fit_bin_env)
+res_lv <- getResidualCov(fit_bin)
+1- (res_env$trace/ res_lv$trace) #Ratio of traces suggest environment variable explain 17.3% of covariation in macroinvetebrates species
+
+
+#Determining which species are in both the trait and plot datasets
+# difference in length of row names(species) in traits and column name(species) in macroinvertebrates
+# adding column names to the data frame
+df1_new<-as.data.frame(t(macro))
+wordsFreq <- data.frame(species = rownames(traits), traits, row.names= NULL)
+macro_1 <- data.frame(species= rownames(df1_new), df1_new=df1_new, row.names= NULL)
+
+# finding the intersection of both column name vectors
+cols_intersection <- intersect(wordsFreq$species, macro_1$species)
+cols_intersection # 6 species identified in both data set
+
+## Extracting only those species with traits from data.frames
+df_list$macroinv <- macro %>%
+  select(`Asellus aquaticus`, `Haliplus sp.`, `Elmis sp.`, `Baetis sp.`, `Helobdella stagnalis`)
+df_list$traits <- semi_join(wordsFreq, macro_1, by = "species")
+df_list$traits %<>% select(-species)
+
+
+##Incorporating traits into fourth corner models
+y <- as.matrix(df_list$macroinv)
+x <- scale(as.matrix(df_list$env))
+TR <-df_list$traits
+
+# Fitting fourth corner model with two latent variables
+fit_4th <- gllvm( y = y, X= x, TR = TR,
+  family = "binomial",
+  num.lv = 2,
+  formula = y ~
+    (conductivity + temperature + altitude) +
+                   (conductivity + temperature + altitude ) : (ovip_single + resp_single + feed_single +size_single))
+
+#Plotting
+coefplot(fit_4th, cex.ylab = 0.7, mar = c(4, 9, 2, 1), 
+         xlim.list = NULL, mfrow=c(1,1))
+
+
+## Coefficients
+fourth = fit_4th$fourth.corner
+
+#library(lattice)
+a = max( abs(fourth) )
+colort = colorRampPalette(c("blue","white","red"))
+plot.4th = levelplot(t(as.matrix(fourth)), xlab = "Environmental Variables",
+ ylab = "Species traits", col.regions = colort(100),
+at = seq( -a, a, length = 100), scales = list( x = list(rot = 45)))
+print(plot.4th)  # shows interactions of the trait variable.
+
+
+## Use likelihood ratio test to see if traits vary with environment
+fit_4th2 <- gllvm(y, x, TR, family = "binomial", num.lv = 2,
+        formula = y ~ (conductivity + temperature + altitude))
+                
+# Test interactions using likelihood ratio test:
+anova(fit_4th, fit_4th2) #p-value suggests that the model where there is no strong evidence of traits mediating the environmental response of species.
+
+
