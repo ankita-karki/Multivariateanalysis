@@ -64,16 +64,16 @@ coefplot(fit_4th, cex.ylab = 0.7, mar = c(4, 9, 2, 1))
 ```
 
 ## Key Results
-Environmental Drivers: Conductivity, temperature, and altitude significantly influenced species distributions (CCA, p < 0.05).
-Trait-Environment Interactions:
-Negative correlation: Altitude vs. shredder feeding strategy.
-Positive correlation: Conductivity vs. shredder feeding, altitude vs. tegument respiration.
-Model Performance: Environmental variables explained 17.3% of species covariation (GLLVM).
-Reproducibility
+* Environmental Drivers: Conductivity, temperature, and altitude significantly influenced species distributions (CCA, p < 0.05).
+* Trait-Environment Interactions:
+   * Negative correlation: Altitude vs. shredder feeding strategy.
+   * Positive correlation: Conductivity vs. shredder feeding, altitude vs. tegument respiration.
+   * Model Performance: Environmental variables explained 17.3% of species covariation (GLLVM).
+   * Reproducibility
 
 ## Clone this repository.
-### Ensure data files (environment.ras, macroinvertebrates.ras, traits.ras) are in the working directory.
-### Run the R script in sequential order.
+* Ensure data files (environment.ras, macroinvertebrates.ras, traits.ras) are in the working directory.
+* Run the R script in sequential order.
 
 ## References
-### R packages: gllvm, mvabund, vegan.
+* R packages: gllvm, mvabund, vegan.
